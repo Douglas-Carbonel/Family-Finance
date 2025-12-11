@@ -28,23 +28,40 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getCategories, getAccounts, getMembers, createTransaction } from "@/lib/api";
+import { 
+  getExpenseCategories, 
+  getExpenseTypes, 
+  getIncomeCategories,
+  getIncomeTypes,
+  getAccounts, 
+  getMembers, 
+  createTransaction,
+  createMovement
+} from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
-const formSchema = z.object({
+const transactionFormSchema = z.object({
   description: z.string().min(2, "Descrição muito curta"),
   amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, "Valor inválido"),
   date: z.date(),
-  categoryId: z.string().min(1, "Selecione uma categoria"),
-  accountId: z.string().min(1, "Selecione uma conta"),
-  memberId: z.string().optional(),
-  type: z.enum(["income", "expense"]),
-  recurrenceType: z.enum(["one_time", "fixed", "installment"]),
+  expenseCategoryId: z.string().min(1, "Selecione uma categoria"),
+  expenseTypeId: z.string().min(1, "Selecione um tipo"),
+  accountId: z.string().optional(),
+  memberId: z.string().min(1, "Selecione um membro"),
   totalInstallments: z.string().optional(),
+});
+
+const movementFormSchema = z.object({
+  description: z.string().min(2, "Descrição muito curta"),
+  amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, "Valor inválido"),
+  date: z.date(),
+  incomeCategoryId: z.string().optional(),
+  incomeTypeId: z.string().min(1, "Selecione um tipo"),
+  accountId: z.string().optional(),
+  memberId: z.string().min(1, "Selecione um membro"),
 });
 
 interface TransactionFormProps {
@@ -54,10 +71,26 @@ interface TransactionFormProps {
 export function TransactionForm({ onSuccess }: TransactionFormProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [formType, setFormType] = useState<"expense" | "income">("expense");
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ["categories"],
-    queryFn: getCategories,
+  const { data: expenseCategories = [] } = useQuery({
+    queryKey: ["expenseCategories"],
+    queryFn: getExpenseCategories,
+  });
+
+  const { data: expenseTypes = [] } = useQuery({
+    queryKey: ["expenseTypes"],
+    queryFn: getExpenseTypes,
+  });
+
+  const { data: incomeCategories = [] } = useQuery({
+    queryKey: ["incomeCategories"],
+    queryFn: getIncomeCategories,
+  });
+
+  const { data: incomeTypes = [] } = useQuery({
+    queryKey: ["incomeTypes"],
+    queryFn: getIncomeTypes,
   });
 
   const { data: accounts = [] } = useQuery({
@@ -70,121 +103,196 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
     queryFn: getMembers,
   });
 
-  const createMutation = useMutation({
+  const createTransactionMutation = useMutation({
     mutationFn: createTransaction,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast({
-        title: "Transação criada",
-        description: "A transação foi registrada com sucesso.",
+        title: "Despesa registrada",
+        description: "A despesa foi registrada com sucesso.",
       });
-      form.reset();
+      transactionForm.reset();
       onSuccess();
     },
     onError: () => {
       toast({
         title: "Erro",
-        description: "Não foi possível criar a transação.",
+        description: "Não foi possível registrar a despesa.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createMovementMutation = useMutation({
+    mutationFn: createMovement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      toast({
+        title: "Renda registrada",
+        description: "A renda foi registrada com sucesso.",
+      });
+      movementForm.reset();
+      onSuccess();
+    },
+    onError: () => {
+      toast({
+        title: "Erro",
+        description: "Não foi possível registrar a renda.",
         variant: "destructive",
       });
     },
   });
   
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const transactionForm = useForm<z.infer<typeof transactionFormSchema>>({
+    resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       description: "",
       amount: "",
       date: new Date(),
-      categoryId: "",
+      expenseCategoryId: "",
+      expenseTypeId: "",
       accountId: "",
       memberId: "",
-      type: "expense",
-      recurrenceType: "one_time",
       totalInstallments: "2",
     },
   });
 
-  const type = form.watch("type");
-  const recurrenceType = form.watch("recurrenceType");
+  const movementForm = useForm<z.infer<typeof movementFormSchema>>({
+    resolver: zodResolver(movementFormSchema),
+    defaultValues: {
+      description: "",
+      amount: "",
+      date: new Date(),
+      incomeCategoryId: "",
+      incomeTypeId: "",
+      accountId: "",
+      memberId: "",
+    },
+  });
 
-  const filteredCategories = categories.filter(c => c.type === type);
+  const selectedExpenseTypeId = transactionForm.watch("expenseTypeId");
+  const selectedExpenseType = expenseTypes.find(t => t.id.toString() === selectedExpenseTypeId);
+  const isInstallment = selectedExpenseType?.name === "Parcelada";
 
-  useEffect(() => {
-    const currentCatId = form.getValues("categoryId");
-    const currentCat = categories.find(c => c.id.toString() === currentCatId);
-    if (currentCat && currentCat.type !== type) {
-      form.setValue("categoryId", "");
-    }
-  }, [type, categories, form]);
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  function onSubmitTransaction(values: z.infer<typeof transactionFormSchema>) {
     const data: any = {
       description: values.description,
       amount: values.amount,
       date: values.date,
-      categoryId: parseInt(values.categoryId),
-      accountId: parseInt(values.accountId),
-      memberId: values.memberId ? parseInt(values.memberId) : null,
-      type: values.type,
-      recurrenceType: values.recurrenceType,
-      isActive: true,
+      expenseCategoryId: parseInt(values.expenseCategoryId),
+      expenseTypeId: parseInt(values.expenseTypeId),
+      accountId: values.accountId ? parseInt(values.accountId) : null,
+      memberId: parseInt(values.memberId),
+      status: "pending",
     };
 
-    if (values.recurrenceType === "installment" && values.totalInstallments) {
+    if (isInstallment && values.totalInstallments) {
       data.totalInstallments = parseInt(values.totalInstallments);
     }
 
-    createMutation.mutate(data);
+    createTransactionMutation.mutate(data);
+  }
+
+  function onSubmitMovement(values: z.infer<typeof movementFormSchema>) {
+    const data: any = {
+      description: values.description,
+      amount: values.amount,
+      date: values.date,
+      incomeCategoryId: values.incomeCategoryId ? parseInt(values.incomeCategoryId) : null,
+      incomeTypeId: parseInt(values.incomeTypeId),
+      accountId: values.accountId ? parseInt(values.accountId) : null,
+      memberId: parseInt(values.memberId),
+    };
+
+    createMovementMutation.mutate(data);
   }
 
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>Nova Transação</DialogTitle>
+        <DialogTitle>Nova Movimentação</DialogTitle>
         <DialogDescription>
-          Registre uma entrada ou saída financeira.
+          Registre uma entrada (renda) ou saída (despesa) financeira.
         </DialogDescription>
       </DialogHeader>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          
-          <FormField
-            control={form.control}
-            name="type"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <FormLabel>Tipo</FormLabel>
-                <FormControl>
-                  <Tabs 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value} 
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="expense" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700" data-testid="tab-expense">Despesa</TabsTrigger>
-                      <TabsTrigger value="income" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-700" data-testid="tab-income">Receita</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+      <Tabs value={formType} onValueChange={(v) => setFormType(v as "expense" | "income")} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="expense" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700" data-testid="tab-expense">
+            Despesa (Transação)
+          </TabsTrigger>
+          <TabsTrigger value="income" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-700" data-testid="tab-income">
+            Renda (Movimentação)
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-          <div className="grid grid-cols-2 gap-4">
+      {formType === "expense" ? (
+        <Form {...transactionForm}>
+          <form onSubmit={transactionForm.handleSubmit(onSubmitTransaction)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={transactionForm.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
+                        <Input placeholder="0.00" {...field} className="pl-9" type="number" step="0.01" data-testid="input-amount" />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={transactionForm.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col mt-2">
+                    <FormLabel className="mb-1">Data</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-date"
+                          >
+                            {field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
-              control={form.control}
-              name="amount"
+              control={transactionForm.control}
+              name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor</FormLabel>
+                  <FormLabel>Descrição</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
-                      <Input placeholder="0.00" {...field} className="pl-9" type="number" step="0.01" data-testid="input-amount" />
-                    </div>
+                    <Input placeholder="Ex: Compras no mercado" {...field} data-testid="input-description" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -192,116 +300,23 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
             />
 
             <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col mt-2">
-                  <FormLabel className="mb-1">Data</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                          data-testid="button-date"
-                        >
-                          {field.value ? (
-                            format(field.value, "dd/MM/yyyy")
-                          ) : (
-                            <span>Selecione</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Compras no mercado" {...field} data-testid="input-description" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="memberId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Membro da Família</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger data-testid="select-member">
-                      <SelectValue placeholder="Selecione (opcional)" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {members.map((member) => (
-                      <SelectItem key={member.id} value={member.id.toString()}>
-                        <span className="flex items-center gap-2">
-                          <span 
-                            className="w-2 h-2 rounded-full" 
-                            style={{ backgroundColor: member.color }} 
-                          />
-                          {member.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="categoryId"
+              control={transactionForm.control}
+              name="memberId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Categoria</FormLabel>
+                  <FormLabel>Membro</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger data-testid="select-category">
-                        <SelectValue placeholder="Selecione" />
+                      <SelectTrigger data-testid="select-member">
+                        <SelectValue placeholder="Selecione o membro" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {filteredCategories.map((category) => (
-                        <SelectItem key={category.id} value={category.id.toString()}>
+                      {members.map((member) => (
+                        <SelectItem key={member.id} value={member.id.toString()}>
                           <span className="flex items-center gap-2">
-                            <span 
-                              className="w-2 h-2 rounded-full" 
-                              style={{ backgroundColor: category.color }} 
-                            />
-                            {category.name}
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: member.color }} />
+                            {member.name}
                           </span>
                         </SelectItem>
                       ))}
@@ -312,16 +327,71 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
               )}
             />
 
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={transactionForm.control}
+                name="expenseTypeId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Despesa</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-type">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {expenseTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.id.toString()}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={transactionForm.control}
+                name="expenseCategoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoria</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-category">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {expenseCategories.map((category) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: category.color }} />
+                              {category.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
-              control={form.control}
+              control={transactionForm.control}
               name="accountId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Conta</FormLabel>
+                  <FormLabel>Conta (opcional)</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-account-transaction">
-                        <SelectValue placeholder="Selecione" />
+                        <SelectValue placeholder="Selecione uma conta" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -336,82 +406,221 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                 </FormItem>
               )}
             />
-          </div>
 
-          {type === "expense" && (
+            {isInstallment && (
+              <FormField
+                control={transactionForm.control}
+                name="totalInstallments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número de Parcelas</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="2" max="48" {...field} data-testid="input-installments" />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      O valor será dividido em {field.value || 2}x
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <DialogFooter className="mt-6">
+              <Button type="submit" className="w-full" disabled={createTransactionMutation.isPending} data-testid="button-submit-transaction">
+                {createTransactionMutation.isPending ? "Salvando..." : "Registrar Despesa"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      ) : (
+        <Form {...movementForm}>
+          <form onSubmit={movementForm.handleSubmit(onSubmitMovement)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={movementForm.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
+                        <Input placeholder="0.00" {...field} className="pl-9" type="number" step="0.01" data-testid="input-amount-income" />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={movementForm.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col mt-2">
+                    <FormLabel className="mb-1">Data</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-date-income"
+                          >
+                            {field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
-              control={form.control}
-              name="recurrenceType"
+              control={movementForm.control}
+              name="description"
               render={({ field }) => (
-                <FormItem className="space-y-3">
-                  <FormLabel>Tipo de Despesa</FormLabel>
+                <FormItem>
+                  <FormLabel>Descrição</FormLabel>
                   <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
-                        <RadioGroupItem value="one_time" id="one_time" data-testid="radio-one-time" />
-                        <label htmlFor="one_time" className="flex-1 cursor-pointer">
-                          <span className="font-medium">Avulsa</span>
-                          <p className="text-sm text-muted-foreground">Gasto único, não se repete</p>
-                        </label>
-                      </div>
-                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
-                        <RadioGroupItem value="fixed" id="fixed" data-testid="radio-fixed" />
-                        <label htmlFor="fixed" className="flex-1 cursor-pointer">
-                          <span className="font-medium">Fixa</span>
-                          <p className="text-sm text-muted-foreground">Recorrente todo mês (aluguel, internet...)</p>
-                        </label>
-                      </div>
-                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
-                        <RadioGroupItem value="installment" id="installment" data-testid="radio-installment" />
-                        <label htmlFor="installment" className="flex-1 cursor-pointer">
-                          <span className="font-medium">Parcelada</span>
-                          <p className="text-sm text-muted-foreground">Compra dividida em X vezes</p>
-                        </label>
-                      </div>
-                    </RadioGroup>
+                    <Input placeholder="Ex: Salário de Janeiro" {...field} data-testid="input-description-income" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          {type === "expense" && recurrenceType === "installment" && (
             <FormField
-              control={form.control}
-              name="totalInstallments"
+              control={movementForm.control}
+              name="memberId"
               render={({ field }) => (
-                <FormItem className="ml-6">
-                  <FormLabel>Número de Parcelas</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="2"
-                      max="48"
-                      {...field}
-                      data-testid="input-installments"
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    O valor será dividido em {field.value || 2}x
-                  </p>
+                <FormItem>
+                  <FormLabel>Membro</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-member-income">
+                        <SelectValue placeholder="Selecione o membro" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {members.map((member) => (
+                        <SelectItem key={member.id} value={member.id.toString()}>
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: member.color }} />
+                            {member.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          <DialogFooter className="mt-6">
-            <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-transaction">
-              {createMutation.isPending ? "Salvando..." : "Salvar Transação"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Form>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={movementForm.control}
+                name="incomeTypeId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Renda</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-income-type">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {incomeTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.id.toString()}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={movementForm.control}
+                name="incomeCategoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoria (opcional)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-income-category">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {incomeCategories.map((category) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: category.color }} />
+                              {category.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={movementForm.control}
+              name="accountId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Conta (opcional)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-account-income">
+                        <SelectValue placeholder="Selecione uma conta" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter className="mt-6">
+              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={createMovementMutation.isPending} data-testid="button-submit-movement">
+                {createMovementMutation.isPending ? "Salvando..." : "Registrar Renda"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      )}
     </div>
   );
 }

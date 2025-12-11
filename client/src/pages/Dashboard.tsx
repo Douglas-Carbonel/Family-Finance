@@ -1,15 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ArrowDownIcon, ArrowUpIcon, DollarSign, Users, Repeat, CalendarClock } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
-import { getCategories, getAccounts, getTransactions, getMembers } from "@/lib/api";
+import { getExpenseCategories, getExpenseTypes, getAccounts, getTransactions, getMovements, getMembers } from "@/lib/api";
 
 export default function Dashboard() {
-  const { data: categories = [] } = useQuery({
-    queryKey: ["categories"],
-    queryFn: getCategories,
+  const { data: expenseCategories = [] } = useQuery({
+    queryKey: ["expenseCategories"],
+    queryFn: getExpenseCategories,
+  });
+
+  const { data: expenseTypes = [] } = useQuery({
+    queryKey: ["expenseTypes"],
+    queryFn: getExpenseTypes,
   });
 
   const { data: accounts = [] } = useQuery({
@@ -22,57 +27,49 @@ export default function Dashboard() {
     queryFn: () => getTransactions(),
   });
 
+  const { data: movements = [] } = useQuery({
+    queryKey: ["movements"],
+    queryFn: () => getMovements(),
+  });
+
   const { data: members = [] } = useQuery({
     queryKey: ["members"],
     queryFn: getMembers,
   });
 
-  const totalIncome = transactions
-    .filter(t => t.type === "income")
-    .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
-
-  const totalExpense = transactions
-    .filter(t => t.type === "expense")
-    .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
-
+  const totalIncome = movements.reduce((acc, m) => acc + parseFloat(m.amount as any), 0);
+  const totalExpense = transactions.reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
   const balance = totalIncome - totalExpense;
 
   const incomeByMember = members.map(member => ({
     name: member.name,
-    value: transactions
-      .filter(t => t.type === "income" && t.memberId === member.id)
-      .reduce((acc, t) => acc + parseFloat(t.amount as any), 0),
+    value: movements
+      .filter(m => m.memberId === member.id)
+      .reduce((acc, m) => acc + parseFloat(m.amount as any), 0),
     color: member.color,
   })).filter(item => item.value > 0);
 
-  const unassignedIncome = transactions
-    .filter(t => t.type === "income" && !t.memberId)
-    .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
-
-  if (unassignedIncome > 0) {
-    incomeByMember.push({ name: "Não atribuída", value: unassignedIncome, color: "#94a3b8" });
-  }
-
-  const expensesByCategory = categories
-    .filter(c => c.type === "expense")
+  const expensesByCategory = expenseCategories
     .map(category => {
       const amount = transactions
-        .filter(t => t.categoryId === category.id)
+        .filter(t => t.expenseCategoryId === category.id)
         .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
       return { name: category.name, value: amount, color: category.color };
     })
     .filter(item => item.value > 0);
 
+  const getExpenseTypeName = (id: number) => expenseTypes.find(t => t.id === id)?.name || "";
+
   const fixedExpenses = transactions
-    .filter(t => t.type === "expense" && t.recurrenceType === "fixed")
+    .filter(t => getExpenseTypeName(t.expenseTypeId) === "Fixa")
     .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
 
   const installmentExpenses = transactions
-    .filter(t => t.type === "expense" && t.recurrenceType === "installment")
+    .filter(t => getExpenseTypeName(t.expenseTypeId) === "Parcelada")
     .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
 
   const oneTimeExpenses = transactions
-    .filter(t => t.type === "expense" && t.recurrenceType === "one_time")
+    .filter(t => getExpenseTypeName(t.expenseTypeId) === "Avulsa")
     .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
 
   const expensesByType = [
@@ -117,7 +114,7 @@ export default function Dashboard() {
               {formatCurrency(totalIncome)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Total de entradas
+              Total de entradas ({movements.length} movimentações)
             </p>
           </CardContent>
         </Card>
@@ -132,7 +129,7 @@ export default function Dashboard() {
               {formatCurrency(totalExpense)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Total de saídas
+              Total de saídas ({transactions.length} transações)
             </p>
           </CardContent>
         </Card>
@@ -283,14 +280,15 @@ export default function Dashboard() {
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Transações Recentes</CardTitle>
-          <CardDescription>Últimas 5 movimentações.</CardDescription>
+          <CardDescription>Últimas 5 despesas registradas.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {transactions.slice(0, 5).map((t) => {
-              const category = categories.find(c => c.id === t.categoryId);
+              const category = expenseCategories.find(c => c.id === t.expenseCategoryId);
               const account = accounts.find(a => a.id === t.accountId);
               const member = members.find(m => m.id === t.memberId);
+              const expenseType = expenseTypes.find(et => et.id === t.expenseTypeId);
               
               return (
                 <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors" data-testid={`transaction-${t.id}`}>
@@ -299,31 +297,35 @@ export default function Dashboard() {
                       className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
                       style={{ backgroundColor: category?.color || '#ccc' }}
                     >
-                      {category?.name.substring(0, 2).toUpperCase()}
+                      {category?.name.substring(0, 2).toUpperCase() || '??'}
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium leading-none flex items-center gap-2">
                         {t.description}
-                        {t.recurrenceType === "installment" && t.installmentNumber && (
+                        {t.installmentNumber && t.totalInstallments && (
                           <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
                             {t.installmentNumber}/{t.totalInstallments}
                           </span>
                         )}
-                        {t.recurrenceType === "fixed" && (
+                        {expenseType?.name === "Fixa" && (
                           <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
                             Fixa
                           </span>
                         )}
+                        {t.status === "pending" && (
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
+                            Pendente
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(t.date), "dd MMM", { locale: ptBR })} • {account?.name}
+                        {format(new Date(t.date), "dd MMM", { locale: ptBR })} • {account?.name || 'Sem conta'}
                         {member && ` • ${member.name}`}
                       </p>
                     </div>
                   </div>
-                  <div className={`text-sm font-bold ${t.type === 'income' ? 'text-green-600' : 'text-foreground'}`}>
-                    {t.type === 'expense' ? '-' : '+'}
-                    {formatCurrency(parseFloat(t.amount as any))}
+                  <div className="text-sm font-bold text-red-600">
+                    -{formatCurrency(parseFloat(t.amount as any))}
                   </div>
                 </div>
               );

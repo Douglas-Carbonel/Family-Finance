@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAccounts, getTransactions, createAccount } from "@/lib/api";
+import { getAccounts, getTransactions, getMovements, createAccount } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Accounts() {
@@ -25,6 +25,11 @@ export default function Accounts() {
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions"],
     queryFn: () => getTransactions(),
+  });
+
+  const { data: movements = [] } = useQuery({
+    queryKey: ["movements"],
+    queryFn: () => getMovements(),
   });
 
   const createMutation = useMutation({
@@ -63,13 +68,11 @@ export default function Accounts() {
     const account = accounts.find(a => a.id === accountId);
     if (!account) return 0;
     
+    const accountMovements = movements.filter(m => m.accountId === accountId);
     const accountTransactions = transactions.filter(t => t.accountId === accountId);
-    const income = accountTransactions
-      .filter(t => t.type === "income")
-      .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
-    const expense = accountTransactions
-      .filter(t => t.type === "expense")
-      .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
+    
+    const income = accountMovements.reduce((acc, m) => acc + parseFloat(m.amount as any), 0);
+    const expense = accountTransactions.reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
     
     return parseFloat(account.initialBalance as any) + income - expense;
   };
