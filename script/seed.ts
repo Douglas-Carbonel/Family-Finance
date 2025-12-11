@@ -11,15 +11,25 @@ const pool = new Pool({
 const db = drizzle(pool, { schema });
 
 const DEFAULT_CATEGORIES = [
+  // Despesas
   { name: "Alimentação", type: "expense", color: "#ef4444" },
   { name: "Moradia", type: "expense", color: "#f97316" },
   { name: "Transporte", type: "expense", color: "#eab308" },
   { name: "Saúde", type: "expense", color: "#10b981" },
   { name: "Lazer", type: "expense", color: "#06b6d4" },
   { name: "Educação", type: "expense", color: "#6366f1" },
+  { name: "Vestuário", type: "expense", color: "#ec4899" },
+  { name: "Mercado", type: "expense", color: "#84cc16" },
+  { name: "Contas", type: "expense", color: "#f59e0b" },
+  { name: "Parcelas", type: "expense", color: "#8b5cf6" },
+  { name: "Outros Gastos", type: "expense", color: "#64748b" },
+  // Rendas
   { name: "Salário", type: "income", color: "#22c55e" },
-  { name: "Investimentos", type: "income", color: "#8b5cf6" },
-  { name: "Outros", type: "expense", color: "#64748b" },
+  { name: "Vale Alimentação", type: "income", color: "#14b8a6" },
+  { name: "Vale Refeição", type: "income", color: "#0ea5e9" },
+  { name: "Freelance", type: "income", color: "#a855f7" },
+  { name: "Investimentos", type: "income", color: "#f97316" },
+  { name: "Outras Rendas", type: "income", color: "#64748b" },
 ];
 
 async function seed() {
