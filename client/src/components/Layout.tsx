@@ -1,0 +1,110 @@
+import { Link, useLocation } from "wouter";
+import { 
+  LayoutDashboard, 
+  Receipt, 
+  Wallet, 
+  PieChart, 
+  Menu,
+  Plus
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState } from "react";
+import { useFinance } from "@/context/FinanceContext";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { TransactionForm } from "./TransactionForm";
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { categories, accounts, addTransaction } = useFinance();
+  const [isTransactionOpen, setIsTransactionOpen] = useState(false);
+
+  const NavItem = ({ href, icon: Icon, label }: { href: string; icon: any; label: string }) => {
+    const isActive = location === href;
+    return (
+      <Link href={href}>
+        <div className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+          isActive 
+            ? "bg-primary text-primary-foreground font-medium" 
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}>
+          <Icon className="h-5 w-5" />
+          <span>{label}</span>
+        </div>
+      </Link>
+    );
+  };
+
+  const Sidebar = () => (
+    <div className="flex flex-col h-full border-r bg-card">
+      <div className="p-6">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+            <Wallet className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <h1 className="font-display text-xl font-bold tracking-tight">FinFamily</h1>
+        </div>
+      </div>
+      
+      <div className="flex-1 px-4 py-2 space-y-1">
+        <NavItem href="/" icon={LayoutDashboard} label="Dashboard" />
+        <NavItem href="/transactions" icon={Receipt} label="Transações" />
+        <NavItem href="/accounts" icon={Wallet} label="Contas" />
+        {/* <NavItem href="/reports" icon={PieChart} label="Relatórios" /> */}
+      </div>
+
+      <div className="p-4 border-t">
+        <Dialog open={isTransactionOpen} onOpenChange={setIsTransactionOpen}>
+          <DialogTrigger asChild>
+            <Button className="w-full gap-2 font-semibold shadow-md hover:shadow-lg transition-all" size="lg">
+              <Plus className="h-5 w-5" />
+              Nova Transação
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <TransactionForm onSuccess={() => setIsTransactionOpen(false)} />
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen w-full bg-background overflow-hidden">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block w-64 flex-shrink-0 h-full">
+        <Sidebar />
+      </div>
+
+      {/* Mobile Header & Content */}
+      <div className="flex flex-col flex-1 h-full overflow-hidden">
+        <header className="md:hidden h-16 border-b bg-card flex items-center justify-between px-4 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <Wallet className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="font-display font-bold text-lg">FinFamily</span>
+          </div>
+          
+          <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-64">
+              <Sidebar />
+            </SheetContent>
+          </Sheet>
+        </header>
+
+        <main className="flex-1 overflow-auto p-4 md:p-8">
+          <div className="mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
