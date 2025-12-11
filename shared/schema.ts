@@ -69,6 +69,11 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true 
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ 
   id: true, 
   createdAt: true 
+}).extend({
+  memberId: z.number().nullable().optional(),
+  installmentNumber: z.number().nullable().optional(),
+  totalInstallments: z.number().nullable().optional(),
+  parentTransactionId: z.number().nullable().optional(),
 });
 export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true });
 
