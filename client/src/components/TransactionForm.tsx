@@ -28,9 +28,11 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFinance, Transaction } from "@/context/FinanceContext";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getCategories, getAccounts, createTransaction } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   description: z.string().min(2, "Descrição muito curta"),
@@ -46,7 +48,38 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ onSuccess }: TransactionFormProps) {
-  const { addTransaction, categories, accounts } = useFinance();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: getCategories,
+  });
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: getAccounts,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast({
+        title: "Transação criada",
+        description: "A transação foi registrada com sucesso.",
+      });
+      form.reset();
+      onSuccess();
+    },
+    onError: () => {
+      toast({
+        title: "Erro",
+        description: "Não foi possível criar a transação.",
+        variant: "destructive",
+      });
+    },
+  });
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -62,29 +95,25 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
 
   const type = form.watch("type");
 
-  // Filter categories based on type
   const filteredCategories = categories.filter(c => c.type === type);
 
-  // Set default category when type changes if current category is invalid
   useEffect(() => {
     const currentCatId = form.getValues("categoryId");
-    const currentCat = categories.find(c => c.id === currentCatId);
+    const currentCat = categories.find(c => c.id.toString() === currentCatId);
     if (currentCat && currentCat.type !== type) {
       form.setValue("categoryId", "");
     }
   }, [type, categories, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    addTransaction({
+    createMutation.mutate({
       description: values.description,
-      amount: Number(values.amount),
-      date: values.date.toISOString(),
-      categoryId: values.categoryId,
-      accountId: values.accountId,
+      amount: values.amount,
+      date: values.date,
+      categoryId: parseInt(values.categoryId),
+      accountId: parseInt(values.accountId),
       type: values.type,
     });
-    form.reset();
-    onSuccess();
   }
 
   return (
@@ -112,8 +141,8 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                     className="w-full"
                   >
                     <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="expense" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700">Despesa</TabsTrigger>
-                      <TabsTrigger value="income" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-700">Receita</TabsTrigger>
+                      <TabsTrigger value="expense" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700" data-testid="tab-expense">Despesa</TabsTrigger>
+                      <TabsTrigger value="income" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-700" data-testid="tab-income">Receita</TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </FormControl>
@@ -132,7 +161,7 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                   <FormControl>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-muted-foreground">R$</span>
-                      <Input placeholder="0.00" {...field} className="pl-9" type="number" step="0.01" />
+                      <Input placeholder="0.00" {...field} className="pl-9" type="number" step="0.01" data-testid="input-amount" />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -155,6 +184,7 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                             "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
+                          data-testid="button-date"
                         >
                           {field.value ? (
                             format(field.value, "dd/MM/yyyy")
@@ -190,7 +220,7 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
               <FormItem>
                 <FormLabel>Descrição</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: Compras no mercado" {...field} />
+                  <Input placeholder="Ex: Compras no mercado" {...field} data-testid="input-description" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -206,13 +236,13 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                   <FormLabel>Categoria</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="select-category">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {filteredCategories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
+                        <SelectItem key={category.id} value={category.id.toString()}>
                           {category.name}
                         </SelectItem>
                       ))}
@@ -231,13 +261,13 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                   <FormLabel>Conta</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="select-account-transaction">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
+                        <SelectItem key={account.id} value={account.id.toString()}>
                           {account.name}
                         </SelectItem>
                       ))}
@@ -250,7 +280,7 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
           </div>
 
           <DialogFooter className="mt-6">
-            <Button type="submit" className="w-full">Salvar Transação</Button>
+            <Button type="submit" className="w-full" data-testid="button-submit-transaction">Salvar Transação</Button>
           </DialogFooter>
         </form>
       </Form>

@@ -1,25 +1,61 @@
-import { useFinance } from "@/context/FinanceContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { useState } from "react";
 import { Search, FilterX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getCategories, getAccounts, getTransactions, deleteTransaction } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Transactions() {
-  const { transactions, categories, accounts, deleteTransaction } = useFinance();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: getCategories,
+  });
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: getAccounts,
+  });
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: () => getTransactions(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast({
+        title: "Transação excluída",
+        description: "A transação foi removida com sucesso.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a transação.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredTransactions = transactions.filter(t => {
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === "all" || t.categoryId === categoryFilter;
-    const matchesAccount = accountFilter === "all" || t.accountId === accountFilter;
+    const matchesCategory = categoryFilter === "all" || t.categoryId === parseInt(categoryFilter);
+    const matchesAccount = accountFilter === "all" || t.accountId === parseInt(accountFilter);
     const matchesType = typeFilter === "all" || t.type === typeFilter;
     return matchesSearch && matchesCategory && matchesAccount && matchesType;
   });
@@ -48,11 +84,12 @@ export default function Transactions() {
                 className="pl-9"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                data-testid="input-search"
               />
             </div>
             <div className="flex gap-2 flex-wrap">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger className="w-[120px]" data-testid="select-type">
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -63,31 +100,31 @@ export default function Transactions() {
               </Select>
 
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[150px]" data-testid="select-category">
                   <SelectValue placeholder="Categoria" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas Cat.</SelectItem>
                   {categories.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
               <Select value={accountFilter} onValueChange={setAccountFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[150px]" data-testid="select-account">
                   <SelectValue placeholder="Conta" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas Contas</SelectItem>
                   {accounts.map(a => (
-                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    <SelectItem key={a.id} value={a.id.toString()}>{a.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
               {(searchTerm || categoryFilter !== "all" || accountFilter !== "all" || typeFilter !== "all") && (
-                <Button variant="ghost" size="icon" onClick={clearFilters} title="Limpar Filtros">
+                <Button variant="ghost" size="icon" onClick={clearFilters} title="Limpar Filtros" data-testid="button-clear-filters">
                   <FilterX className="h-4 w-4" />
                 </Button>
               )}
@@ -113,7 +150,7 @@ export default function Transactions() {
                     const category = categories.find(c => c.id === t.categoryId);
                     const account = accounts.find(a => a.id === t.accountId);
                     return (
-                      <TableRow key={t.id}>
+                      <TableRow key={t.id} data-testid={`row-transaction-${t.id}`}>
                         <TableCell className="font-medium">
                           {format(new Date(t.date), "dd/MM/yyyy")}
                         </TableCell>
@@ -126,14 +163,15 @@ export default function Transactions() {
                         <TableCell className="text-muted-foreground">{account?.name}</TableCell>
                         <TableCell className={`text-right font-bold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                           {t.type === 'expense' ? '-' : '+'} 
-                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(t.amount as any))}
                         </TableCell>
                         <TableCell>
                           <Button 
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => deleteTransaction(t.id)}
+                            onClick={() => deleteMutation.mutate(t.id)}
+                            data-testid={`button-delete-${t.id}`}
                           >
                             <span className="sr-only">Delete</span>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>

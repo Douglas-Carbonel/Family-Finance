@@ -3,21 +3,18 @@ import {
   LayoutDashboard, 
   Receipt, 
   Wallet, 
-  PieChart, 
   Menu,
   Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { useFinance } from "@/context/FinanceContext";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { TransactionForm } from "./TransactionForm";
+import { TransactionForm } from "@/components/TransactionForm";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const { categories, accounts, addTransaction } = useFinance();
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
 
   const NavItem = ({ href, icon: Icon, label }: { href: string; icon: any; label: string }) => {
@@ -28,7 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           isActive 
             ? "bg-primary text-primary-foreground font-medium" 
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}>
+        }`} data-testid={`nav-${href.replace('/', '') || 'dashboard'}`}>
           <Icon className="h-5 w-5" />
           <span>{label}</span>
         </div>
@@ -51,13 +48,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <NavItem href="/" icon={LayoutDashboard} label="Dashboard" />
         <NavItem href="/transactions" icon={Receipt} label="Transações" />
         <NavItem href="/accounts" icon={Wallet} label="Contas" />
-        {/* <NavItem href="/reports" icon={PieChart} label="Relatórios" /> */}
       </div>
 
       <div className="p-4 border-t">
         <Dialog open={isTransactionOpen} onOpenChange={setIsTransactionOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full gap-2 font-semibold shadow-md hover:shadow-lg transition-all" size="lg">
+            <Button className="w-full gap-2 font-semibold shadow-md hover:shadow-lg transition-all" size="lg" data-testid="button-new-transaction">
               <Plus className="h-5 w-5" />
               Nova Transação
             </Button>
@@ -72,12 +68,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
-      {/* Desktop Sidebar */}
       <div className="hidden md:block w-64 flex-shrink-0 h-full">
         <Sidebar />
       </div>
 
-      {/* Mobile Header & Content */}
       <div className="flex flex-col flex-1 h-full overflow-hidden">
         <header className="md:hidden h-16 border-b bg-card flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -89,7 +83,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>

@@ -1,5 +1,4 @@
-import { useFinance } from "@/context/FinanceContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Wallet, CreditCard, Banknote, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -7,25 +6,72 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getAccounts, getTransactions, createAccount } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Accounts() {
-  const { accounts, getAccountBalance, addAccount } = useFinance();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState<any>("checking");
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: getAccounts,
+  });
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: () => getTransactions(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createAccount,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      toast({
+        title: "Conta criada",
+        description: "A conta foi adicionada com sucesso.",
+      });
+      setNewAccountName("");
+      setNewAccountType("checking");
+      setIsOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Erro",
+        description: "Não foi possível criar a conta.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAccountName) return;
     
-    addAccount({
+    createMutation.mutate({
       name: newAccountName,
-      type: newAccountType
+      type: newAccountType,
+      initialBalance: "0"
     });
+  };
+
+  const getAccountBalance = (accountId: number) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return 0;
     
-    setNewAccountName("");
-    setNewAccountType("checking");
-    setIsOpen(false);
+    const accountTransactions = transactions.filter(t => t.accountId === accountId);
+    const income = accountTransactions
+      .filter(t => t.type === "income")
+      .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
+    const expense = accountTransactions
+      .filter(t => t.type === "expense")
+      .reduce((acc, t) => acc + parseFloat(t.amount as any), 0);
+    
+    return parseFloat(account.initialBalance as any) + income - expense;
   };
 
   const getIcon = (type: string) => {
@@ -57,7 +103,7 @@ export default function Accounts() {
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" data-testid="button-add-account">
               <Plus className="h-4 w-4" />
               Nova Conta
             </Button>
@@ -75,12 +121,13 @@ export default function Accounts() {
                   value={newAccountName}
                   onChange={(e) => setNewAccountName(e.target.value)}
                   required
+                  data-testid="input-account-name"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Tipo</Label>
                 <Select value={newAccountType} onValueChange={setNewAccountType}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-account-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -92,7 +139,7 @@ export default function Accounts() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="submit" className="w-full">Criar Conta</Button>
+              <Button type="submit" className="w-full" data-testid="button-submit-account">Criar Conta</Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -102,7 +149,7 @@ export default function Accounts() {
         {accounts.map((account) => {
           const balance = getAccountBalance(account.id);
           return (
-            <Card key={account.id} className="hover-elevate transition-all overflow-hidden relative">
+            <Card key={account.id} className="hover-elevate transition-all overflow-hidden relative" data-testid={`card-account-${account.id}`}>
               <div className={`absolute top-0 left-0 w-1 h-full ${balance < 0 ? 'bg-red-500' : 'bg-primary'}`} />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-base font-medium">
@@ -113,7 +160,7 @@ export default function Accounts() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${balance < 0 ? 'text-red-600' : 'text-foreground'}`}>
+                <div className={`text-2xl font-bold ${balance < 0 ? 'text-red-600' : 'text-foreground'}`} data-testid={`text-balance-${account.id}`}>
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balance)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 capitalize">
