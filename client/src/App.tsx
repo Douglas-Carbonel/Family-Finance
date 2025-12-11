@@ -9,6 +9,7 @@ import { Layout } from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
+import Family from "@/pages/Family";
 
 function Router() {
   return (
@@ -17,6 +18,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/transactions" component={Transactions} />
         <Route path="/accounts" component={Accounts} />
+        <Route path="/family" component={Family} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

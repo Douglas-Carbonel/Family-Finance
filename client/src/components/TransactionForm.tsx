@@ -28,10 +28,11 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getCategories, getAccounts, createTransaction } from "@/lib/api";
+import { getCategories, getAccounts, getMembers, createTransaction } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
@@ -40,7 +41,10 @@ const formSchema = z.object({
   date: z.date(),
   categoryId: z.string().min(1, "Selecione uma categoria"),
   accountId: z.string().min(1, "Selecione uma conta"),
+  memberId: z.string().optional(),
   type: z.enum(["income", "expense"]),
+  recurrenceType: z.enum(["one_time", "fixed", "installment"]),
+  totalInstallments: z.string().optional(),
 });
 
 interface TransactionFormProps {
@@ -59,6 +63,11 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
     queryFn: getAccounts,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ["members"],
+    queryFn: getMembers,
   });
 
   const createMutation = useMutation({
@@ -89,11 +98,15 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
       date: new Date(),
       categoryId: "",
       accountId: "",
+      memberId: "",
       type: "expense",
+      recurrenceType: "one_time",
+      totalInstallments: "2",
     },
   });
 
   const type = form.watch("type");
+  const recurrenceType = form.watch("recurrenceType");
 
   const filteredCategories = categories.filter(c => c.type === type);
 
@@ -106,14 +119,23 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
   }, [type, categories, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    createMutation.mutate({
+    const data: any = {
       description: values.description,
       amount: values.amount,
       date: values.date,
       categoryId: parseInt(values.categoryId),
       accountId: parseInt(values.accountId),
+      memberId: values.memberId ? parseInt(values.memberId) : null,
       type: values.type,
-    });
+      recurrenceType: values.recurrenceType,
+      isActive: true,
+    };
+
+    if (values.recurrenceType === "installment" && values.totalInstallments) {
+      data.totalInstallments = parseInt(values.totalInstallments);
+    }
+
+    createMutation.mutate(data);
   }
 
   return (
@@ -227,6 +249,37 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="memberId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Membro da Família</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-member">
+                      <SelectValue placeholder="Selecione (opcional)" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.id.toString()}>
+                        <span className="flex items-center gap-2">
+                          <span 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: member.color }} 
+                          />
+                          {member.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -243,7 +296,13 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                     <SelectContent>
                       {filteredCategories.map((category) => (
                         <SelectItem key={category.id} value={category.id.toString()}>
-                          {category.name}
+                          <span className="flex items-center gap-2">
+                            <span 
+                              className="w-2 h-2 rounded-full" 
+                              style={{ backgroundColor: category.color }} 
+                            />
+                            {category.name}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -279,8 +338,77 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
             />
           </div>
 
+          {type === "expense" && (
+            <FormField
+              control={form.control}
+              name="recurrenceType"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormLabel>Tipo de Despesa</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
+                        <RadioGroupItem value="one_time" id="one_time" data-testid="radio-one-time" />
+                        <label htmlFor="one_time" className="flex-1 cursor-pointer">
+                          <span className="font-medium">Avulsa</span>
+                          <p className="text-sm text-muted-foreground">Gasto único, não se repete</p>
+                        </label>
+                      </div>
+                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
+                        <RadioGroupItem value="fixed" id="fixed" data-testid="radio-fixed" />
+                        <label htmlFor="fixed" className="flex-1 cursor-pointer">
+                          <span className="font-medium">Fixa</span>
+                          <p className="text-sm text-muted-foreground">Recorrente todo mês (aluguel, internet...)</p>
+                        </label>
+                      </div>
+                      <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer">
+                        <RadioGroupItem value="installment" id="installment" data-testid="radio-installment" />
+                        <label htmlFor="installment" className="flex-1 cursor-pointer">
+                          <span className="font-medium">Parcelada</span>
+                          <p className="text-sm text-muted-foreground">Compra dividida em X vezes</p>
+                        </label>
+                      </div>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {type === "expense" && recurrenceType === "installment" && (
+            <FormField
+              control={form.control}
+              name="totalInstallments"
+              render={({ field }) => (
+                <FormItem className="ml-6">
+                  <FormLabel>Número de Parcelas</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="2"
+                      max="48"
+                      {...field}
+                      data-testid="input-installments"
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    O valor será dividido em {field.value || 2}x
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           <DialogFooter className="mt-6">
-            <Button type="submit" className="w-full" data-testid="button-submit-transaction">Salvar Transação</Button>
+            <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-transaction">
+              {createMutation.isPending ? "Salvando..." : "Salvar Transação"}
+            </Button>
           </DialogFooter>
         </form>
       </Form>

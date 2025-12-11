@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Search, FilterX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getCategories, getAccounts, getTransactions, deleteTransaction } from "@/lib/api";
+import { getCategories, getAccounts, getTransactions, deleteTransaction, getMembers } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Transactions() {
@@ -32,6 +32,11 @@ export default function Transactions() {
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions"],
     queryFn: () => getTransactions(),
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ["members"],
+    queryFn: getMembers,
   });
 
   const deleteMutation = useMutation({
@@ -149,12 +154,34 @@ export default function Transactions() {
                   filteredTransactions.map((t) => {
                     const category = categories.find(c => c.id === t.categoryId);
                     const account = accounts.find(a => a.id === t.accountId);
+                    const member = members.find(m => m.id === t.memberId);
                     return (
                       <TableRow key={t.id} data-testid={`row-transaction-${t.id}`}>
                         <TableCell className="font-medium">
                           {format(new Date(t.date), "dd/MM/yyyy")}
                         </TableCell>
-                        <TableCell>{t.description}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span>{t.description}</span>
+                            {t.recurrenceType === "installment" && t.installmentNumber && (
+                              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                                {t.installmentNumber}/{t.totalInstallments}
+                              </span>
+                            )}
+                            {t.recurrenceType === "fixed" && (
+                              <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                Fixa
+                              </span>
+                            )}
+                            {member && (
+                              <span 
+                                className="w-2 h-2 rounded-full" 
+                                style={{ backgroundColor: member.color }}
+                                title={member.name}
+                              />
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-secondary/10 text-secondary-foreground">
                             {category?.name}

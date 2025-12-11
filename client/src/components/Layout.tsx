@@ -4,7 +4,8 @@ import {
   Receipt, 
   Wallet, 
   Menu,
-  Plus
+  Plus,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -48,6 +49,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <NavItem href="/" icon={LayoutDashboard} label="Dashboard" />
         <NavItem href="/transactions" icon={Receipt} label="Transações" />
         <NavItem href="/accounts" icon={Wallet} label="Contas" />
+        <NavItem href="/family" icon={Users} label="Família" />
       </div>
 
       <div className="p-4 border-t">
