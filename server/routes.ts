@@ -221,7 +221,11 @@ export async function registerRoutes(
 
   app.post("/api/movements", async (req, res) => {
     try {
-      const result = insertMovementSchema.safeParse(req.body);
+      const data = {
+        ...req.body,
+        date: new Date(req.body.date),
+      };
+      const result = insertMovementSchema.safeParse(data);
       if (!result.success) {
         return res.status(400).json({ message: fromZodError(result.error).message });
       }
@@ -280,7 +284,12 @@ export async function registerRoutes(
     try {
       const { totalInstallments, ...transactionData } = req.body;
       
-      const result = insertTransactionSchema.safeParse(transactionData);
+      const data = {
+        ...transactionData,
+        date: new Date(transactionData.date),
+      };
+      
+      const result = insertTransactionSchema.safeParse(data);
       if (!result.success) {
         return res.status(400).json({ message: fromZodError(result.error).message });
       }
