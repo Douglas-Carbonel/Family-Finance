@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
 import Family from "@/pages/Family";
+import Settings from "@/pages/Settings";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/transactions" component={Transactions} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/family" component={Family} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

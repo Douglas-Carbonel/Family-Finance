@@ -66,12 +66,13 @@ const movementFormSchema = z.object({
 
 interface TransactionFormProps {
   onSuccess: () => void;
+  defaultFormType?: "expense" | "income";
 }
 
-export function TransactionForm({ onSuccess }: TransactionFormProps) {
+export function TransactionForm({ onSuccess, defaultFormType = "expense" }: TransactionFormProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [formType, setFormType] = useState<"expense" | "income">("expense");
+  const [formType, setFormType] = useState<"expense" | "income">(defaultFormType);
 
   const { data: expenseCategories = [] } = useQuery({
     queryKey: ["expenseCategories"],

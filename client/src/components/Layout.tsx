@@ -4,8 +4,10 @@ import {
   Receipt, 
   Wallet, 
   Menu,
+  Minus,
   Plus,
-  Users
+  Users,
+  Settings
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,10 +15,27 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { TransactionForm } from "@/components/TransactionForm";
 
+interface FormDialogProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultType: "expense" | "income";
+}
+
+function FormDialog({ isOpen, onOpenChange, defaultType }: FormDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <TransactionForm onSuccess={() => onOpenChange(false)} defaultFormType={defaultType} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isTransactionOpen, setIsTransactionOpen] = useState(false);
+  const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  const [isIncomeOpen, setIsIncomeOpen] = useState(false);
 
   const NavItem = ({ href, icon: Icon, label }: { href: string; icon: any; label: string }) => {
     const isActive = location === href;
@@ -50,20 +69,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <NavItem href="/transactions" icon={Receipt} label="Transações" />
         <NavItem href="/accounts" icon={Wallet} label="Contas" />
         <NavItem href="/family" icon={Users} label="Família" />
+        <NavItem href="/settings" icon={Settings} label="Configurações" />
       </div>
 
-      <div className="p-4 border-t">
-        <Dialog open={isTransactionOpen} onOpenChange={setIsTransactionOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full gap-2 font-semibold shadow-md hover:shadow-lg transition-all" size="lg" data-testid="button-new-transaction">
-              <Plus className="h-5 w-5" />
-              Nova Transação
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <TransactionForm onSuccess={() => setIsTransactionOpen(false)} />
-          </DialogContent>
-        </Dialog>
+      <div className="p-4 border-t space-y-2">
+        <Button 
+          variant="destructive"
+          className="w-full gap-2 font-semibold shadow-md transition-all" 
+          size="lg" 
+          onClick={() => setIsExpenseOpen(true)}
+          data-testid="button-new-expense"
+        >
+          <Minus className="h-5 w-5" />
+          Nova Despesa
+        </Button>
+        <Button 
+          className="w-full gap-2 font-semibold shadow-md transition-all bg-green-600 dark:bg-green-700 text-white" 
+          size="lg" 
+          onClick={() => setIsIncomeOpen(true)}
+          data-testid="button-new-income"
+        >
+          <Plus className="h-5 w-5" />
+          Nova Renda
+        </Button>
       </div>
     </div>
   );
@@ -101,6 +129,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+
+      <FormDialog isOpen={isExpenseOpen} onOpenChange={setIsExpenseOpen} defaultType="expense" />
+      <FormDialog isOpen={isIncomeOpen} onOpenChange={setIsIncomeOpen} defaultType="income" />
     </div>
   );
 }
