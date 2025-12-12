@@ -57,10 +57,21 @@ Preferred communication style: Simple, everyday language.
 ### API Design
 All API endpoints follow REST conventions under `/api`:
 - `GET/POST /api/members` - Family member management
-- `GET/POST /api/categories` - Transaction categories
+- `GET/POST /api/income-types` - Income type management
+- `GET/POST /api/income-categories` - Income category management
+- `GET/POST /api/expense-types` - Expense type management
+- `GET/POST /api/expense-categories` - Expense category management
 - `GET/POST /api/accounts` - Financial accounts
-- `GET/POST/DELETE /api/transactions` - Transaction CRUD with filtering
+- `GET/POST/DELETE /api/transactions` - Transaction (expense) CRUD with filtering
+- `GET/POST/DELETE /api/movements` - Movement (income) CRUD with filtering
 - `GET/POST /api/budgets` - Budget management
+
+### Pages
+- **Dashboard** (`/`) - Financial summary with charts
+- **Transações** (`/transactions`) - Expense management
+- **Contas** (`/accounts`) - Account management
+- **Família** (`/family`) - Family member management
+- **Configurações** (`/settings`) - Settings for income types and categories
 
 ## External Dependencies
 
