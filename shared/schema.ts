@@ -92,6 +92,10 @@ export const transactions = pgTable("transactions", {
   totalInstallments: integer("total_installments"),
   parentTransactionId: integer("parent_transaction_id"),
   
+  // Para despesas recorrentes (fixas)
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  recurrenceEndDate: timestamp("recurrence_end_date"),
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -124,6 +128,8 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   installmentNumber: z.number().nullable().optional(),
   totalInstallments: z.number().nullable().optional(),
   parentTransactionId: z.number().nullable().optional(),
+  isRecurring: z.boolean().optional(),
+  recurrenceEndDate: z.date().nullable().optional(),
 });
 export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true });
 

@@ -29,6 +29,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
@@ -52,6 +53,8 @@ const transactionFormSchema = z.object({
   accountId: z.string().optional(),
   memberId: z.string().min(1, "Selecione um membro"),
   totalInstallments: z.string().optional(),
+  isRecurring: z.boolean().optional(),
+  recurrenceEndDate: z.date().nullable().optional(),
 });
 
 const movementFormSchema = z.object({
@@ -155,6 +158,8 @@ export function TransactionForm({ onSuccess, defaultFormType = "expense" }: Tran
       accountId: "",
       memberId: "",
       totalInstallments: "2",
+      isRecurring: false,
+      recurrenceEndDate: null,
     },
   });
 
@@ -185,6 +190,8 @@ export function TransactionForm({ onSuccess, defaultFormType = "expense" }: Tran
       accountId: values.accountId ? parseInt(values.accountId) : null,
       memberId: parseInt(values.memberId),
       status: "pending",
+      isRecurring: values.isRecurring || false,
+      recurrenceEndDate: values.recurrenceEndDate || null,
     };
 
     if (isInstallment && values.totalInstallments) {
@@ -425,6 +432,75 @@ export function TransactionForm({ onSuccess, defaultFormType = "expense" }: Tran
                   </FormItem>
                 )}
               />
+            )}
+
+            {selectedExpenseType?.name === "Fixa" && (
+              <div className="space-y-4 p-4 border rounded-md bg-muted/30">
+                <FormField
+                  control={transactionForm.control}
+                  name="isRecurring"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between">
+                      <div className="space-y-0.5">
+                        <FormLabel>Despesa Recorrente</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Se repetirá todo mês até a data final
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-recurring"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {transactionForm.watch("isRecurring") && (
+                  <FormField
+                    control={transactionForm.control}
+                    name="recurrenceEndDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data Final da Recorrência</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                                data-testid="button-recurrence-end-date"
+                              >
+                                {field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione (ex: 2028)</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={field.onChange}
+                              initialFocus
+                              fromYear={new Date().getFullYear()}
+                              toYear={2050}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs text-muted-foreground">
+                          Ex: Financiamento do carro até 12/2028
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
             )}
 
             <DialogFooter className="mt-6">

@@ -270,3 +270,15 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   if (!response.ok) throw new Error("Failed to fetch dashboard summary");
   return response.json();
 }
+
+// Committed expenses
+export interface CommittedExpenses {
+  monthlyCommitments: { month: number; year: number; amount: number }[];
+  totalCommitted: number;
+}
+
+export async function getCommittedExpenses(): Promise<CommittedExpenses> {
+  const response = await fetch(`${API_BASE}/dashboard/committed`);
+  if (!response.ok) throw new Error("Failed to fetch committed expenses");
+  return response.json();
+}

@@ -287,6 +287,7 @@ export async function registerRoutes(
       const data = {
         ...transactionData,
         date: new Date(transactionData.date),
+        recurrenceEndDate: transactionData.recurrenceEndDate ? new Date(transactionData.recurrenceEndDate) : null,
       };
       
       const result = insertTransactionSchema.safeParse(data);
@@ -365,6 +366,45 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Orçamento não encontrado" });
       }
       res.json(budget);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Committed expenses for future months (recurring expenses)
+  app.get("/api/dashboard/committed", async (req, res) => {
+    try {
+      const transactions = await storage.getTransactions({});
+      const now = new Date();
+      
+      // Calculate committed value for next 12 months
+      const monthlyCommitments: { month: number; year: number; amount: number }[] = [];
+      
+      for (let i = 1; i <= 12; i++) {
+        const futureDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const month = futureDate.getMonth() + 1;
+        const year = futureDate.getFullYear();
+        
+        let committedAmount = 0;
+        
+        for (const t of transactions) {
+          if (t.isRecurring) {
+            const endDate = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null;
+            if (!endDate || futureDate <= endDate) {
+              committedAmount += parseFloat(t.amount);
+            }
+          }
+        }
+        
+        monthlyCommitments.push({ month, year, amount: committedAmount });
+      }
+      
+      const totalCommitted = monthlyCommitments.reduce((sum, m) => sum + m.amount, 0);
+      
+      res.json({
+        monthlyCommitments,
+        totalCommitted,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
